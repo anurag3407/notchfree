@@ -1,6 +1,52 @@
 import Foundation
 import Combine
 
+public struct DailyInsightPoint: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let date: Date
+    public let weekdayLabel: String
+    public let dayNumberLabel: String
+    public let completedTasks: Int
+    public let plannedTasks: Int
+    public let focusMinutes: Int
+
+    public init(
+        id: String,
+        date: Date,
+        weekdayLabel: String,
+        dayNumberLabel: String,
+        completedTasks: Int,
+        plannedTasks: Int,
+        focusMinutes: Int
+    ) {
+        self.id = id
+        self.date = date
+        self.weekdayLabel = weekdayLabel
+        self.dayNumberLabel = dayNumberLabel
+        self.completedTasks = completedTasks
+        self.plannedTasks = plannedTasks
+        self.focusMinutes = focusMinutes
+    }
+}
+
+public struct WeeklyMomentumSummary: Equatable, Sendable {
+    public let completedLast7Days: Int
+    public let completedPrevious7Days: Int
+    public let plannedLast7Days: Int
+    public let focusMinutesLast7Days: Int
+    public let activeDaysLast7Days: Int
+    public let dailyPoints: [DailyInsightPoint]
+
+    public var formattedFocusTime: String {
+        let hours = focusMinutesLast7Days / 60
+        let mins = focusMinutesLast7Days % 60
+        if hours > 0 {
+            return "\(hours)h \(mins)m"
+        }
+        return "\(mins)m"
+    }
+}
+
 @MainActor
 public final class ProductivityInsightsStore: ObservableObject {
     public static let shared = ProductivityInsightsStore()
@@ -94,6 +140,88 @@ public final class ProductivityInsightsStore: ObservableObject {
             .sorted { $0.minutes > $1.minutes }
     }
 
+    /// Computes the 7-day momentum card and daily bar-chart breakdown.
+    public func weeklySummary(tasks: [NotchTask], referenceDate: Date = Date()) -> WeeklyMomentumSummary {
+        let todayStart = calendar.startOfDay(for: referenceDate)
+        let weekdayFormatter = DateFormatter()
+        weekdayFormatter.calendar = calendar
+        weekdayFormatter.dateFormat = "EEE"
+
+        let dayFormatter = DateFormatter()
+        dayFormatter.calendar = calendar
+        dayFormatter.dateFormat = "d"
+
+        var points: [DailyInsightPoint] = []
+        var completedLast7 = 0
+        var plannedLast7 = 0
+        var focusMinutesLast7 = 0
+        var activeDays = 0
+
+        for offset in (-6...0) {
+            let day = calendar.date(byAdding: .day, value: offset, to: todayStart) ?? todayStart
+            let key = DailyNote.dayKey(for: day, calendar: calendar)
+
+            let completedOnDay = tasks.filter { task in
+                guard task.isCompleted else { return false }
+                let d = task.completedAt ?? task.scheduledDay ?? task.createdAt
+                return DailyNote.dayKey(for: d, calendar: calendar) == key
+            }.count
+
+            let scheduledOrCompletedOnDay = tasks.filter { task in
+                if let sched = task.scheduledDay, DailyNote.dayKey(for: sched, calendar: calendar) == key {
+                    return true
+                }
+                if task.isCompleted, let comp = task.completedAt, DailyNote.dayKey(for: comp, calendar: calendar) == key {
+                    return true
+                }
+                return false
+            }.count
+
+            let planned = max(completedOnDay, scheduledOrCompletedOnDay)
+            let focusSecs = sessions
+                .filter { DailyNote.dayKey(for: $0.startedAt, calendar: calendar) == key }
+                .reduce(0.0) { $0 + $1.durationSeconds }
+            let focusMins = Int(focusSecs / 60)
+
+            if completedOnDay > 0 || focusMins > 0 {
+                activeDays += 1
+            }
+            completedLast7 += completedOnDay
+            plannedLast7 += planned
+            focusMinutesLast7 += focusMins
+
+            points.append(
+                DailyInsightPoint(
+                    id: key,
+                    date: day,
+                    weekdayLabel: weekdayFormatter.string(from: day),
+                    dayNumberLabel: dayFormatter.string(from: day),
+                    completedTasks: completedOnDay,
+                    plannedTasks: planned,
+                    focusMinutes: focusMins
+                )
+            )
+        }
+
+        // Previous 7 days (-13...-7) for week-over-week comparison
+        let prevStart = calendar.date(byAdding: .day, value: -13, to: todayStart) ?? todayStart
+        let prevEnd = calendar.date(byAdding: .day, value: -6, to: todayStart) ?? todayStart
+        let completedPrev7 = tasks.filter { task in
+            guard task.isCompleted else { return false }
+            let d = task.completedAt ?? task.createdAt
+            return d >= prevStart && d < prevEnd
+        }.count
+
+        return WeeklyMomentumSummary(
+            completedLast7Days: completedLast7,
+            completedPrevious7Days: completedPrev7,
+            plannedLast7Days: max(completedLast7, plannedLast7),
+            focusMinutesLast7Days: focusMinutesLast7,
+            activeDaysLast7Days: activeDays,
+            dailyPoints: points
+        )
+    }
+
     private func load() {
         guard let data = try? Data(contentsOf: storageURL) else { return }
         if let decoded = try? JSONDecoder().decode([FocusSessionRecord].self, from: data) {
@@ -102,7 +230,7 @@ public final class ProductivityInsightsStore: ObservableObject {
     }
 
     private func save() {
-        guard let data = try? JSONEncoder().encode(sessions) else { return }
+        guard let data = try? Data(contentsOf: storageURL) else { return }
         try? data.write(to: storageURL, options: .atomic)
     }
 }

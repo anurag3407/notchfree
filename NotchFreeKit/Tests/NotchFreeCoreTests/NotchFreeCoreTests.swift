@@ -113,6 +113,11 @@ struct NotchFreeCoreTests {
         #expect(insights.todayFocusMinutes(referenceDate: today) == 25)
         #expect(insights.currentStreak(tasks: store.tasks, referenceDate: today) == 1)
         #expect(insights.bestFocusHours().first?.hour == 14)
+
+        let summary = insights.weeklySummary(tasks: store.tasks, referenceDate: today)
+        #expect(summary.dailyPoints.count == 7)
+        #expect(summary.focusMinutesLast7Days == 25)
+        #expect(summary.activeDaysLast7Days == 1)
     }
 
     @Test("BookingCalendarClient decodes Calendly and Cal.com payloads")

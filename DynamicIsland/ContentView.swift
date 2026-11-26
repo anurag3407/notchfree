@@ -198,6 +198,10 @@ struct ContentView: View {
             return CGSize(width: baseSize.width, height: resolvedHeight)
         }
 
+        if coordinator.currentView == .planner {
+            return CGSize(width: max(baseSize.width, 720), height: max(baseSize.height, 315))
+        }
+
         if coordinator.currentView == .clipboard {
             // Clipboard has its own fixed height source; don't inherit whatever notes
             // layout state happens to be set.
