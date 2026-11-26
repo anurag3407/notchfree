@@ -389,6 +389,8 @@
 				7E61181E2E24071E0050006C /* SkyLightWindow */,
 				7E288D112F1659EF0020C117 /* AtollExtensionKit */,
 				7EF19C162F577040005B9929 /* SwiftTerm */,
+				AA1122334455667788990002 /* NotchFreeCore */,
+				AA1122334455667788990003 /* NotchFreeUI */,
 			);
 			productName = DynamicIsland;
 			productReference = F54406E72CD4987A00C7AFD9 /* Atoll.app */;
@@ -437,6 +439,7 @@
 				7E09D5962EB7B497005AF41D /* XCRemoteSwiftPackageReference "open-meteo" */,
 				7E288D102F1659EF0020C117 /* XCRemoteSwiftPackageReference "AtollExtensionKit" */,
 				7EF19C152F577040005B9929 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
+				AA1122334455667788990001 /* XCLocalSwiftPackageReference "NotchFreeKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F54406E82CD4987A00C7AFD9 /* Products */;
@@ -805,7 +808,7 @@
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DynamicIsland/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Atoll;
+				INFOPLIST_KEY_CFBundleDisplayName = NotchFree;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_MetalCaptureEnabled = YES;
@@ -830,7 +833,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
 				MARKETING_VERSION = 2.3.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.Ebullioscopic.Atoll.dev;
-				PRODUCT_NAME = Atoll;
+				PRODUCT_NAME = NotchFree;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
 				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
@@ -880,7 +883,7 @@
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DynamicIsland/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Atoll;
+				INFOPLIST_KEY_CFBundleDisplayName = NotchFree;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_MetalCaptureEnabled = YES;
@@ -905,7 +908,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
 				MARKETING_VERSION = 2.3.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.Ebullioscopic.Atoll;
-				PRODUCT_NAME = Atoll;
+				PRODUCT_NAME = NotchFree;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
 				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
@@ -1071,6 +1074,13 @@
 		};
 /* End XCRemoteSwiftPackageReference section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		AA1122334455667788990001 /* XCLocalSwiftPackageReference "NotchFreeKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = NotchFreeKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		146BC4362D366E9B0047C66A /* MacroVisionKit */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -1126,6 +1136,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B19424072CD0DB52003E5DC2 /* XCRemoteSwiftPackageReference "LottieUI" */;
 			productName = LottieUI;
+		};
+		AA1122334455667788990002 /* NotchFreeCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA1122334455667788990001 /* XCLocalSwiftPackageReference "NotchFreeKit" */;
+			productName = NotchFreeCore;
+		};
+		AA1122334455667788990003 /* NotchFreeUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA1122334455667788990001 /* XCLocalSwiftPackageReference "NotchFreeKit" */;
+			productName = NotchFreeUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

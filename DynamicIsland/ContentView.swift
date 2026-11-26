@@ -28,6 +28,8 @@ import KeyboardShortcuts
 import SwiftUI
 import SwiftUIIntrospect
 import AtollExtensionKit
+import NotchFreeCore
+import NotchFreeUI
 #if canImport(AppKit)
 import AppKit
 #elseif canImport(UIKit)
@@ -1300,6 +1302,20 @@ struct ContentView: View {
                                   NotchColorPickerView()
                             case .notes:
                                 NotchNotesView()
+                            case .planner:
+                                NotchFreePlannerView(calendarEventsProvider: {
+                                    CalendarManager.shared.events.map { event in
+                                        CalendarTimeBlock(
+                                            id: event.id,
+                                            title: event.title,
+                                            start: event.start,
+                                            end: event.end,
+                                            isAllDay: event.isAllDay,
+                                            location: event.location,
+                                            conferenceURL: event.conferenceURL
+                                        )
+                                    }
+                                })
                             case .clipboard:
                                 NotchClipboardView()
                             case .terminal:

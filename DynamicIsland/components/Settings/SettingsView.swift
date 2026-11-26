@@ -16,6 +16,7 @@ import Sparkle
 import SwiftUI
 import SwiftUIIntrospect
 import UniformTypeIdentifiers
+import NotchFreeUI
 
 /// Groups for organizing settings tabs in the sidebar.
 private enum SettingsTabGroup: String, CaseIterable, Identifiable {
@@ -65,6 +66,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     case shelf
     case shortcuts
     case notes
+    case planner
     case terminal
     case about
 
@@ -76,7 +78,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .general, .appearance:                                          return .core
         case .media, .liveActivities, .lockScreen, .devices:                 return .mediaAndDisplay
         case .hudAndOSD, .battery:                                           return .system
-        case .timer, .calendar, .notes:                                      return .productivity
+        case .timer, .calendar, .notes, .planner:                          return .productivity
         case .clipboard, .screenAssistant, .colorPicker, .shelf,
              .downloads, .shortcuts:                                         return .utilities
         case .stats, .terminal:                                              return .developer
@@ -106,6 +108,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .shelf: return String(localized: "Shelf")
         case .shortcuts: return String(localized: "Shortcuts")
         case .notes: return String(localized: "Notes")
+        case .planner: return String(localized: "Planner & AI")
         case .terminal: return String(localized: "Terminal")
         case .about: return String(localized: "About")
         }
@@ -132,6 +135,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .shelf: return "books.vertical"
         case .shortcuts: return "keyboard"
         case .notes: return "note.text"
+        case .planner: return "checklist"
         case .terminal: return "apple.terminal"
         case .about: return "info.circle"
         }
@@ -158,6 +162,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .shelf: return .brown
         case .shortcuts: return .orange
         case .notes: return Color(red: 0.979, green: 0.716, blue: 0.153, opacity: 1.000)
+        case .planner: return .blue
         case .terminal: return Color(red: 0.2, green: 0.8, blue: 0.4)
         case .about: return .secondary
         }
@@ -1097,6 +1102,10 @@ struct SettingsView: View {
         case .notes:
             SettingsForm(tab: .notes) {
                 NotesSettingsView()
+            }
+        case .planner:
+            SettingsForm(tab: .planner) {
+                NotchFreeSettingsSection()
             }
         case .terminal:
             SettingsForm(tab: .terminal) {
