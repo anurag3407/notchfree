@@ -6,6 +6,7 @@ public struct NotchFreeSettingsSection: View {
     @ObservedObject private var mcpServer = NotchFreeMCPServer.shared
     @ObservedObject private var nudgeMonitor = DistractionNudgeMonitor.shared
     @ObservedObject private var ttlService = TimeToLeaveService.shared
+    @ObservedObject private var localSendReceive = LocalSendReceiveCoordinator.shared
 
     @State private var calendlyKey: String = KeychainSecretStore.load(key: BookingCalendarClient.calendlyKeyName) ?? ""
     @State private var calComKey: String = KeychainSecretStore.load(key: BookingCalendarClient.calComKeyName) ?? ""
@@ -52,6 +53,25 @@ public struct NotchFreeSettingsSection: View {
                     get: { mcpServer.isRunning },
                     set: { enabled in enabled ? mcpServer.start() : mcpServer.stop() }
                 ))
+            }
+
+            Section("Trusted Android / LocalSend Devices") {
+                if localSendReceive.trustedDevices.isEmpty {
+                    Text("No trusted devices yet. Tap 'Trust' on an incoming LocalSend prompt to auto-accept future drops.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(Array(localSendReceive.trustedDevices.sorted(by: { $0.value < $1.value })), id: \.key) { fingerprint, alias in
+                        HStack {
+                            Text(alias)
+                            Spacer()
+                            Button("Revoke", role: .destructive) {
+                                localSendReceive.untrustDevice(fingerprint: fingerprint)
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                }
             }
 
             if let savedBanner {

@@ -13,6 +13,7 @@ import Network
 import Defaults
 import UniformTypeIdentifiers
 import Darwin
+import NotchFreeCore
 
 struct LocalSendDeviceInfo: Identifiable, Hashable, Sendable {
     let id: String
@@ -653,30 +654,79 @@ final class LocalSendService: NSObject, ObservableObject {
 
     private func handleRegisterConnection(_ connection: NWConnection) {
         connection.start(queue: .global(qos: .utility))
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 131_072) { [weak self] content, _, _, _ in
-            guard let self, let data = content, !data.isEmpty else {
+        readFullIncomingHTTP(from: connection, accumulated: Data(), expectedTotalLength: nil)
+    }
+
+    private nonisolated func readFullIncomingHTTP(
+        from connection: NWConnection,
+        accumulated: Data,
+        expectedTotalLength: Int?
+    ) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 262_144) { [weak self] content, _, isComplete, error in
+            guard let self else {
+                connection.cancel()
+                return
+            }
+            if error != nil {
                 connection.cancel()
                 return
             }
 
-            Task { @MainActor in
-                let response = self.processRegisterRequest(data: data, from: connection.endpoint)
-                connection.send(content: response, completion: .contentProcessed { _ in
-                    connection.cancel()
-                })
+            var buffer = accumulated
+            if let content {
+                buffer.append(content)
+            }
+
+            var targetTotal = expectedTotalLength
+            if targetTotal == nil, let sepRange = buffer.range(of: Data("\r\n\r\n".utf8)) {
+                let headText = String(decoding: buffer[..<sepRange.lowerBound], as: UTF8.self)
+                let contentLength = Self.parseHTTPContentLength(from: headText)
+                targetTotal = sepRange.upperBound + contentLength
+            }
+
+            if let targetTotal, targetTotal > 250 * 1024 * 1024 {
+                connection.cancel()
+                return
+            }
+
+            let isReady: Bool
+            if let targetTotal {
+                isReady = buffer.count >= targetTotal || isComplete
+            } else {
+                isReady = isComplete
+            }
+
+            if isReady {
+                Task { @MainActor in
+                    let response = await self.processRegisterRequest(data: buffer, from: connection.endpoint)
+                    connection.send(content: response, completion: .contentProcessed { _ in
+                        connection.cancel()
+                    })
+                }
+            } else {
+                self.readFullIncomingHTTP(from: connection, accumulated: buffer, expectedTotalLength: targetTotal)
             }
         }
     }
 
-    private func processRegisterRequest(data: Data, from endpoint: NWEndpoint) -> Data {
-        guard let request = String(data: data, encoding: .utf8) else {
+    private nonisolated static func parseHTTPContentLength(from headText: String) -> Int {
+        for line in headText.components(separatedBy: "\r\n") {
+            if line.lowercased().hasPrefix("content-length:") {
+                let raw = line.components(separatedBy: ":").dropFirst().joined(separator: ":").trimmingCharacters(in: .whitespaces)
+                return Int(raw) ?? 0
+            }
+        }
+        return 0
+    }
+
+    private func processRegisterRequest(data: Data, from endpoint: NWEndpoint) async -> Data {
+        let separator = Data("\r\n\r\n".utf8)
+        guard let sepRange = data.range(of: separator) else {
             return httpResponse(status: 400, json: ["error": "invalid-request"])
         }
-
-        let parts = request.components(separatedBy: "\r\n\r\n")
-        guard let head = parts.first,
-              let firstLine = head.components(separatedBy: "\r\n").first
-        else {
+        let head = String(decoding: data[..<sepRange.lowerBound], as: UTF8.self)
+        let bodyData = Data(data[sepRange.upperBound...])
+        guard let firstLine = head.components(separatedBy: "\r\n").first else {
             return httpResponse(status: 400, json: ["error": "invalid-request"])
         }
 
@@ -687,13 +737,12 @@ final class LocalSendService: NSObject, ObservableObject {
 
         let method = String(tokens[0]).uppercased()
         let rawPath = String(tokens[1])
-        let path = rawPath.components(separatedBy: "?").first ?? rawPath
+        let components = URLComponents(string: "http://localhost\(rawPath)")
+        let path = components?.path ?? rawPath
 
         if method == "POST", path == "/api/localsend/v2/register" || path == "/api/localsend/v3/register" {
             let callerIP = endpointIPv4(endpoint)
-            let bodyText = parts.dropFirst().joined(separator: "\r\n\r\n")
-            let bodyData = bodyText.data(using: .utf8)
-            let json = bodyData.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            let json = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
 
             if let json,
                let fingerprint = json["fingerprint"] as? String,
@@ -726,7 +775,7 @@ final class LocalSendService: NSObject, ObservableObject {
             }
 
             let responseJSON: [String: Any] = [
-                "alias": Host.current().localizedName ?? "Atoll",
+                "alias": Host.current().localizedName ?? "NotchFree",
                 "version": "2.1",
                 "deviceModel": "Mac",
                 "deviceType": "desktop",
@@ -738,9 +787,9 @@ final class LocalSendService: NSObject, ObservableObject {
             return httpResponse(status: 200, json: responseJSON)
         }
 
-        if method == "GET", path == "/api/localsend/v2/info" {
+        if method == "GET", path == "/api/localsend/v2/info" || path == "/api/localsend/v3/info" {
             let responseJSON: [String: Any] = [
-                "alias": Host.current().localizedName ?? "Atoll",
+                "alias": Host.current().localizedName ?? "NotchFree",
                 "version": "2.1",
                 "deviceModel": "Mac",
                 "deviceType": "desktop",
@@ -750,6 +799,31 @@ final class LocalSendService: NSObject, ObservableObject {
                 "download": false,
             ]
             return httpResponse(status: 200, json: responseJSON)
+        }
+
+        if method == "POST", path == "/api/localsend/v2/prepare-upload" || path == "/api/localsend/v3/prepare-upload" {
+            let res = await LocalSendReceiveCoordinator.shared.handlePrepareUpload(bodyData: bodyData)
+            return httpResponse(status: res.status, json: res.json)
+        }
+
+        if method == "POST", path == "/api/localsend/v2/upload" || path == "/api/localsend/v3/upload" {
+            let queryItems = components?.queryItems ?? []
+            let sessionID = queryItems.first(where: { $0.name == "sessionId" })?.value ?? ""
+            let fileID = queryItems.first(where: { $0.name == "fileId" })?.value ?? ""
+            let token = queryItems.first(where: { $0.name == "token" })?.value ?? ""
+            let res = LocalSendReceiveCoordinator.shared.handleUpload(
+                sessionID: sessionID,
+                fileID: fileID,
+                token: token,
+                bodyData: bodyData
+            )
+            return httpResponse(status: res.status, json: res.json)
+        }
+
+        if method == "POST", path == "/api/localsend/v2/cancel" || path == "/api/localsend/v3/cancel" {
+            let sessionID = components?.queryItems?.first(where: { $0.name == "sessionId" })?.value ?? ""
+            let res = LocalSendReceiveCoordinator.shared.handleCancel(sessionID: sessionID)
+            return httpResponse(status: res.status, json: res.json)
         }
 
         return httpResponse(status: 404, json: ["error": "not-found"])

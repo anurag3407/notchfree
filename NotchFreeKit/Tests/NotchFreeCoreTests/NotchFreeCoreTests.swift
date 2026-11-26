@@ -160,5 +160,63 @@ struct NotchFreeCoreTests {
         #expect(restored.tasks.count == 1)
         #expect(store.tasks.first?.title == "Backup Test")
     }
+
+    @Test("PhoneDropServer two-way Android & iPhone drop + LocalSendReceiveCoordinator")
+    @MainActor
+    func phoneDropAndLocalSendReceiver() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+
+        let dropServer = PhoneDropServer(dropDirectory: tempDir)
+        let token = dropServer.sessionToken
+        var routedItems: [DroppedItemPayload] = []
+        dropServer.onItemReceived = { routedItems.append($0) }
+        dropServer.macClipboardProvider = { "Copied from Mac" }
+
+        let shelfSample = tempDir.appendingPathComponent("hello.txt")
+        try Data("from mac shelf".utf8).write(to: shelfSample)
+        dropServer.shelfFilesProvider = {
+            [ShelfShareableFile(id: "item-1", name: "hello.txt", url: shelfSample, byteCount: 14)]
+        }
+
+        // Unauthorized request rejected
+        let unauth = await dropServer.processHTTPRequest(Data("GET / HTTP/1.1\r\n\r\n".utf8))
+        #expect(String(decoding: unauth, as: UTF8.self).contains("401 Unauthorized"))
+
+        // Text drop
+        let textReq = Data("POST /drop-text?token=\(token) HTTP/1.1\r\nContent-Length: 18\r\n\r\nhttps://notchfree.app".utf8)
+        let textResp = await dropServer.processHTTPRequest(textReq)
+        #expect(String(decoding: textResp, as: UTF8.self).contains("200 OK"))
+        #expect(routedItems.last?.kind == .text)
+
+        // File drop
+        let fileReq = Data("POST /drop-file?token=\(token) HTTP/1.1\r\nX-Filename: pixel_photo.jpg\r\nContent-Length: 4\r\n\r\nJPEG".utf8)
+        let fileResp = await dropServer.processHTTPRequest(fileReq)
+        #expect(String(decoding: fileResp, as: UTF8.self).contains("200 OK"))
+        #expect(routedItems.last?.kind == .file)
+
+        // Pull Mac clipboard & Shelf file
+        let clipResp = await dropServer.processHTTPRequest(Data("GET /mac-clipboard?token=\(token) HTTP/1.1\r\n\r\n".utf8))
+        #expect(String(decoding: clipResp, as: UTF8.self).contains("Copied from Mac"))
+        let dlResp = await dropServer.processHTTPRequest(Data("GET /shelf-file/item-1?token=\(token) HTTP/1.1\r\n\r\n".utf8))
+        #expect(String(decoding: dlResp, as: UTF8.self).contains("from mac shelf"))
+
+        // LocalSendReceiveCoordinator trust + prepare-upload + upload
+        let receiver = LocalSendReceiveCoordinator(
+            trustStorageURL: tempDir.appendingPathComponent("trust.json"),
+            dropDirectory: tempDir
+        )
+        receiver.trustDevice(fingerprint: "android-pixel-9", alias: "Pixel 9")
+        let prepareBody = """
+        {"info":{"alias":"Pixel 9","fingerprint":"android-pixel-9","deviceModel":"Pixel 9"},"files":{"f1":{"id":"f1","fileName":"android.png","size":3,"fileType":"image/png"}}}
+        """.data(using: .utf8)!
+        let prepRes = await receiver.handlePrepareUpload(bodyData: prepareBody)
+        #expect(prepRes.status == 200)
+        let sid = prepRes.json["sessionId"] as? String ?? ""
+        let uploadToken = (prepRes.json["files"] as? [String: String])?["f1"] ?? ""
+        let upRes = receiver.handleUpload(sessionID: sid, fileID: "f1", token: uploadToken, bodyData: Data("PNG".utf8))
+        #expect(upRes.status == 200)
+        #expect(receiver.receiveState == .completed(summary: "1 item(s) from Pixel 9"))
+    }
 }
 #endif

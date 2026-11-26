@@ -54,7 +54,7 @@ struct DynamicNotchApp: App {
             }
             CheckForUpdatesView(updater: updaterController.updater)
             Divider()
-            Button("Restart Atoll") {
+            Button("Restart NotchFree") {
                 guard let bundleIdentifier = Bundle.main.bundleIdentifier else { return }
 
                 let workspace = NSWorkspace.shared
@@ -708,6 +708,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         LockScreenManager.shared.configure(viewModel: vm)
         extensionXPCServiceHost.start()
         extensionRPCServer.start()
+        PhoneDropBridge.shared.configure()
         
         // Migrate legacy progress bar settings
         Defaults.Keys.migrateProgressBarStyle()

@@ -64,6 +64,7 @@ struct ContentView: View {
     @ObservedObject var extensionLiveActivityManager = ExtensionLiveActivityManager.shared
     @ObservedObject var extensionNotchExperienceManager = ExtensionNotchExperienceManager.shared
     @ObservedObject var localSendService = LocalSendService.shared
+    @ObservedObject var localSendReceive = LocalSendReceiveCoordinator.shared
     @State private var downloadManager = DownloadManager.shared
     @ObservedObject var shelfState = ShelfStateViewModel.shared
     
@@ -469,9 +470,11 @@ struct ContentView: View {
     
     /// Whether the LocalSend live activity should be shown
     private var localSendLiveActivityActive: Bool {
-        localSendService.isSending || 
+        localSendService.isSending ||
         localSendService.transferState == .completed ||
-        isLocalSendFailedOrRejected
+        isLocalSendFailedOrRejected ||
+        localSendReceive.receiveState != .idle ||
+        localSendReceive.pendingOffer != nil
     }
     
     private var isLocalSendFailedOrRejected: Bool {

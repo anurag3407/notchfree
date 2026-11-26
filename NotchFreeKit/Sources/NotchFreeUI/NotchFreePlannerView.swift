@@ -33,7 +33,8 @@ public struct NotchFreePlannerView: View {
     @ObservedObject private var nudgeMonitor = DistractionNudgeMonitor.shared
     @ObservedObject private var remindersSync = RemindersSyncService.shared
     @ObservedObject private var mcpServer = NotchFreeMCPServer.shared
-    @ObservedObject private var dropServer = iPhoneDropServer.shared
+    @ObservedObject private var dropServer = PhoneDropServer.shared
+    @ObservedObject private var localSendReceive = LocalSendReceiveCoordinator.shared
     @ObservedObject private var ttlService = TimeToLeaveService.shared
     @StateObject private var voiceRecognizer = VoiceTaskRecognizer()
 
@@ -715,27 +716,98 @@ public struct NotchFreePlannerView: View {
 
                 Divider().opacity(0.2)
 
-                // Drop from iPhone
+                // Drop from Android & iPhone (QR Web Drop + LocalSend Receiver)
                 HStack {
                     VStack(alignment: .leading) {
-                        Text("Drop from iPhone (Wi-Fi)").font(.caption.bold())
-                        Text(dropServer.isRunning ? dropServer.dropURLString : "Scan QR on iPhone to drop files/text")
+                        Text("Drop from Android & iPhone (Wi-Fi)").font(.caption.bold())
+                        Text(dropServer.isRunning ? "QR paired · Files → Shelf, Text → Clipboard" : "Scan QR on Android/iPhone, or use Android Share → LocalSend")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
+                    if dropServer.isRunning {
+                        Button("New Token") {
+                            dropServer.regenerateToken()
+                        }
+                        .controlSize(.mini)
+                    }
                     Button(dropServer.isRunning ? "Stop" : "Start") {
                         dropServer.isRunning ? dropServer.stop() : dropServer.start()
                     }
                     .controlSize(.mini)
                 }
                 if dropServer.isRunning, let qr = dropServer.qrCodeImage() {
-                    Image(nsImage: qr)
-                        .interpolation(.none)
-                        .resizable()
-                        .frame(width: 72, height: 72)
-                        .background(Color.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(nsImage: qr)
+                            .interpolation(.none)
+                            .resizable()
+                            .frame(width: 72, height: 72)
+                            .background(Color.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Two-way mobile page:")
+                                .font(.caption2.bold())
+                            Text(dropServer.dropURLString)
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                            if let toast = dropServer.lastDropToast {
+                                Text(toast)
+                                    .font(.caption2)
+                                    .foregroundStyle(.green)
+                            }
+                        }
+                    }
+                }
+                if !dropServer.receivedItems.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Recent Phone Drops")
+                            .font(.caption2.bold())
+                            .foregroundStyle(.secondary)
+                        ForEach(dropServer.receivedItems.prefix(4)) { item in
+                            HStack(spacing: 6) {
+                                Image(systemName: item.kind == .file ? "doc.fill" : "doc.on.clipboard")
+                                    .font(.caption2)
+                                    .foregroundStyle(.blue)
+                                Text(item.title)
+                                    .font(.caption2)
+                                    .lineLimit(1)
+                                Text("· \(item.source.label)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                Spacer()
+                                if item.kind == .text, let txt = item.text {
+                                    Button("Copy") {
+                                        NSPasteboard.general.clearContents()
+                                        NSPasteboard.general.setString(txt, forType: .string)
+                                        statusBanner = "Copied text to clipboard"
+                                    }
+                                    .controlSize(.mini)
+                                } else if let url = item.fileURL {
+                                    Button("Reveal") {
+                                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                                    }
+                                    .controlSize(.mini)
+                                }
+                            }
+                        }
+                    }
+                }
+                if let offer = localSendReceive.pendingOffer {
+                    HStack(spacing: 8) {
+                        Text("Incoming from \(offer.senderAlias) (\(offer.fileCount) item(s))")
+                            .font(.caption2.bold())
+                        Spacer()
+                        Button("Decline") { localSendReceive.respondToPendingOffer(.decline) }
+                            .controlSize(.mini)
+                        Button("Accept") { localSendReceive.respondToPendingOffer(.acceptOnce) }
+                            .controlSize(.mini)
+                        Button("Trust") { localSendReceive.respondToPendingOffer(.alwaysTrust) }
+                            .controlSize(.mini)
+                    }
+                    .padding(6)
+                    .background(Color.blue.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
                 }
 
                 Divider().opacity(0.2)

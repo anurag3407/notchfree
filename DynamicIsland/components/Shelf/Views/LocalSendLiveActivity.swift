@@ -18,15 +18,30 @@
 
 import SwiftUI
 import Defaults
+import NotchFreeCore
 
 struct LocalSendLiveActivity: View {
     @EnvironmentObject var vm: DynamicIslandViewModel
     @StateObject private var localSend = LocalSendService.shared
+    @ObservedObject private var receiveCoordinator = LocalSendReceiveCoordinator.shared
     
     @State private var isHovering: Bool = false
     @State private var isExpanded: Bool = false
     
     private var tint: Color {
+        if receiveCoordinator.pendingOffer != nil {
+            return .blue
+        }
+        switch receiveCoordinator.receiveState {
+        case .completed:
+            return .green
+        case .failed, .rejected:
+            return .red
+        case .receiving, .awaitingApproval:
+            return .blue
+        case .idle:
+            break
+        }
         switch localSend.transferState {
         case .completed:
             return .green
@@ -38,8 +53,10 @@ struct LocalSendLiveActivity: View {
     }
     
     private var isActive: Bool {
-        localSend.isSending || localSend.transferState == .completed || 
-        isFailedOrRejected
+        localSend.isSending || localSend.transferState == .completed ||
+        isFailedOrRejected ||
+        receiveCoordinator.receiveState != .idle ||
+        receiveCoordinator.pendingOffer != nil
     }
     
     private var isFailedOrRejected: Bool {
@@ -49,58 +66,96 @@ struct LocalSendLiveActivity: View {
     }
     
     var body: some View {
-        HStack(spacing: 0) {
-            // Left side: upload icon capsule
-            Color.clear
-                .background {
-                    if isExpanded {
-                        HStack {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .fill(tint.opacity(0.14))
-                                
-                                Image(systemName: leftIcon)
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(tint)
+        VStack(spacing: 6) {
+            HStack(spacing: 0) {
+                // Left side: upload or incoming drop icon capsule
+                Color.clear
+                    .background {
+                        if isExpanded {
+                            HStack {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .fill(tint.opacity(0.14))
+                                    
+                                    Image(systemName: leftIcon)
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(tint)
+                                }
+                                .frame(
+                                    width: vm.effectiveClosedNotchHeight - 12,
+                                    height: vm.effectiveClosedNotchHeight - 12
+                                )
                             }
-                            .frame(
-                                width: vm.effectiveClosedNotchHeight - 12,
-                                height: vm.effectiveClosedNotchHeight - 12
-                            )
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                     }
-                }
-                .frame(
-                    width: isExpanded ? max(0, vm.effectiveClosedNotchHeight - (isHovering ? 0 : 12)) : 0,
-                    height: vm.effectiveClosedNotchHeight - (isHovering ? 0 : 12)
-                )
-            
-            // Center: closed notch body (slightly wider during transfers)
-            Rectangle()
-                .fill(.black)
-                .frame(
-                    width: vm.closedNotchSize.width
-                        + (isHovering ? 8 : 0)
-                        + (isActive ? 40 : 0)
-                )
-            
-            // Right side: progress ring or status icon
-            Color.clear
-                .background {
-                    if isExpanded {
-                        HStack {
-                            rightContent
+                    .frame(
+                        width: isExpanded ? max(0, vm.effectiveClosedNotchHeight - (isHovering ? 0 : 12)) : 0,
+                        height: vm.effectiveClosedNotchHeight - (isHovering ? 0 : 12)
+                    )
+                
+                // Center: closed notch body (slightly wider during transfers)
+                Rectangle()
+                    .fill(.black)
+                    .frame(
+                        width: vm.closedNotchSize.width
+                            + (isHovering ? 8 : 0)
+                            + (isActive ? 40 : 0)
+                    )
+                
+                // Right side: progress ring or status icon
+                Color.clear
+                    .background {
+                        if isExpanded {
+                            HStack {
+                                rightContent
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
                     }
+                    .frame(
+                        width: isExpanded ? max(60, vm.effectiveClosedNotchHeight) : 0,
+                        height: vm.effectiveClosedNotchHeight - (isHovering ? 0 : 12)
+                    )
+            }
+            .frame(height: vm.effectiveClosedNotchHeight + (isHovering ? 8 : 0))
+
+            if let offer = receiveCoordinator.pendingOffer {
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(offer.senderAlias) wants to drop \(offer.fileCount) item(s)")
+                            .font(.caption.bold())
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        if let first = offer.previewNames.first {
+                            Text(first)
+                                .font(.caption2)
+                                .foregroundStyle(.white.opacity(0.7))
+                                .lineLimit(1)
+                        }
+                    }
+                    Spacer()
+                    Button("Decline") {
+                        receiveCoordinator.respondToPendingOffer(.decline)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    Button("Accept") {
+                        receiveCoordinator.respondToPendingOffer(.acceptOnce)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.mini)
+                    Button("Trust") {
+                        receiveCoordinator.respondToPendingOffer(.alwaysTrust)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
+                    .controlSize(.mini)
                 }
-                .frame(
-                    width: isExpanded ? max(60, vm.effectiveClosedNotchHeight) : 0,
-                    height: vm.effectiveClosedNotchHeight - (isHovering ? 0 : 12)
-                )
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            }
         }
-        .frame(height: vm.effectiveClosedNotchHeight + (isHovering ? 8 : 0))
         .onAppear {
             withAnimation(.smooth(duration: 0.35)) {
                 isExpanded = true
@@ -114,13 +169,23 @@ struct LocalSendLiveActivity: View {
     }
     
     private var leftIcon: String {
-        // Always show document upload icon on left side
+        if receiveCoordinator.receiveState != .idle || receiveCoordinator.pendingOffer != nil {
+            return "arrow.down.doc.fill"
+        }
         return "document.badge.arrow.up.fill"
     }
     
     @ViewBuilder
     private var rightContent: some View {
-        switch localSend.transferState {
+        switch receiveCoordinator.receiveState {
+        case .awaitingApproval:
+            Image(systemName: "person.badge.shield.checkmark.fill")
+                .foregroundStyle(.blue)
+                .font(.system(size: 15, weight: .semibold))
+                .padding(.trailing, 6)
+        case .receiving(let progress, _):
+            LocalSendProgressRing(progress: progress)
+                .padding(.trailing, 6)
         case .completed:
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.green)
@@ -136,9 +201,27 @@ struct LocalSendLiveActivity: View {
                 .foregroundStyle(.orange)
                 .font(.system(size: 16, weight: .semibold))
                 .padding(.trailing, 6)
-        case .sending, .idle:
-            LocalSendProgressRing(progress: localSend.sendProgress)
-                .padding(.trailing, 6)
+        case .idle:
+            switch localSend.transferState {
+            case .completed:
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .font(.system(size: 16, weight: .semibold))
+                    .padding(.trailing, 6)
+            case .failed:
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.red)
+                    .font(.system(size: 16, weight: .semibold))
+                    .padding(.trailing, 6)
+            case .rejected:
+                Image(systemName: "hand.raised.fill")
+                    .foregroundStyle(.orange)
+                    .font(.system(size: 16, weight: .semibold))
+                    .padding(.trailing, 6)
+            case .sending, .idle:
+                LocalSendProgressRing(progress: localSend.sendProgress)
+                    .padding(.trailing, 6)
+            }
         }
     }
 }
