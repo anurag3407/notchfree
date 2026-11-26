@@ -83,12 +83,19 @@ jobs:
           xcodebuild build \
             -project DynamicIsland.xcodeproj \
             -scheme DynamicIsland \
+            -configuration Release \
             -destination "platform=macOS" \
+            -derivedDataPath build/DerivedData \
             -resultBundlePath BuildResults.xcresult \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=YES \
             CODE_SIGN_INJECT_BASE_ENTITLEMENTS=YES
+
+          APP_PATH=$(find build/DerivedData/Build/Products/Release -maxdepth 1 -name "*.app" | head -n 1)
+          echo "Built app: $APP_PATH"
+          mkdir -p dist
+          ditto -c -k --keepParent "$APP_PATH" "dist/NotchFree.app.zip"
 
       - name: Surface Failure Diagnostics
         if: failure()
@@ -97,6 +104,14 @@ jobs:
           xcrun xcresulttool get build-results --path BuildResults.xcresult 2>/dev/null \
             || xcrun xcresulttool get --path BuildResults.xcresult --format json 2>/dev/null | head -c 20000 \
             || echo "No xcresult available."
+
+      - name: Upload NotchFree App
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notchfree-app-${{ matrix.macos_version }}
+          path: dist/NotchFree.app.zip
+          retention-days: 7
 
       - name: Upload Build Results
         if: always()

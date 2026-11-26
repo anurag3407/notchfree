@@ -13,6 +13,8 @@
 	<string>NotchFree needs audio capture permission to show the real-time music waveform and to set the volume of individual apps. Audio is only processed live and is never recorded or saved.</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>NotchFree needs screen recording permission to capture screenshots for the AI assistant feature.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>NotchFree uses on-device speech recognition to turn dictated phrases into tasks.</string>
 	<key>SUEnableDownloaderService</key>
 	<true/>
 	<key>SUEnableInstallerLauncherService</key>
